@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lise Web CBS Laboratuvarı</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Leaflet Heatmap Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-heat@0.2.0/dist/leaflet-heat.js"></script>
+  
+  <!-- Turf.js Spatial Analysis Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  
+  <!-- SheetJS for Excel Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- PapaParse for CSV Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    
+    .leaflet-container {
+      background-color: #020617 !important;
+    }
+    
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col text-slate-100 overflow-hidden select-none">
+
+  <!-- Top Navigation Header -->
+  <header class="h-14 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between px-4 z-20 flex-shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 bg-gradient-to-tr from-cyan-600 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-950/50">
+        <i class="fa-solid fa-earth-americas text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-sm sm:text-base bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
+          Lise Web CBS Laboratuvarı
+        </h1>
+        <p class="text-[10px] text-slate-400 hidden sm:block">MEB Coğrafya Müfredatı & TÜBİTAK Proje Destek Platformu</p>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center space-x-2">
+      <button onclick="exportWorkspaceJSON()" class="px-2.5 py-1.5 bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 border border-cyan-500/40 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow" title="Tüm projeyi ve katmanları kaydet/paylaş">
+        <i class="fa-solid fa-share-nodes"></i>
+        <span class="hidden md:inline">Projeyi Paylaş / İndir</span>
+      </button>
+
+      <label class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow cursor-pointer" title="Paylaşılan proje dosyasını yükle">
+        <i class="fa-solid fa-folder-open text-amber-400"></i>
+        <span class="hidden md:inline">Proje Yükle</span>
+        <input type="file" accept=".json" onchange="importWorkspaceJSON(event)" class="hidden">
+      </label>
+
+      <button onclick="loadPPMData()" class="px-2.5 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-vial-circle-check"></i>
+        <span class="hidden md:inline">MikroPPM Veri Seti</span>
+      </button>
+
+      <button onclick="loadSampleData()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-flask"></i>
+        <span class="hidden md:inline">Örnek Veri Yükle</span>
+      </button>
+
+      <button onclick="clearAnalyses()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow">
+        <i class="fa-solid fa-broom"></i>
+        <span class="hidden md:inline">Analizleri Temizle</span>
+      </button>
+
+      <button onclick="toggleHelpModal()" class="w-8 h-8 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg flex items-center justify-center text-xs transition border border-slate-700">
+        <i class="fa-solid fa-circle-question text-sm"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 flex overflow-hidden relative">
+    
+    <!-- Sidebar Navigation Controls -->
+    <div class="w-80 sm:w-96 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0 z-10">
+      
+      <!-- Tab Controls -->
+      <div class="flex border-b border-slate-800 text-xs font-medium bg-slate-950/50">
+        <button id="tab-btn-layers" onclick="switchTab('layers')" class="flex-1 py-3 text-center border-b-2 border-cyan-500 text-cyan-400 font-semibold transition flex flex-col items-center gap-1">
+          <i class="fa-solid fa-layer-group text-sm"></i>
+          <span>Katmanlar</span>
+        </button>
+        <button id="tab-btn-draw" onclick="switchTab('draw')" class="flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex flex-col items-center gap-1">
+          <i class="fa-solid fa-pen-ruler text-sm"></i>
+          <span>Çizim</span>
+        </button>
+        <button id="tab-btn-analysis" onclick="switchTab('analysis')" class="flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex flex-col items-center gap-1">
+          <i class="fa-solid fa-chart-pie text-sm"></i>
+          <span>Analizler</span>
+        </button>
+        <button id="tab-btn-scenarios" onclick="switchTab('scenarios')" class="flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex flex-col items-center gap-1">
+          <i class="fa-solid fa-graduation-cap text-sm"></i>
+          <span>Senaryolar</span>
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
+        
+        <!-- 1. LAYERS TAB -->
+        <div id="tab-content-layers" class="space-y-4">
+          
+          <!-- Data Import Box -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between text-slate-300 font-semibold text-xs">
+              <span><i class="fa-solid fa-file-arrow-up text-cyan-400 mr-1.5"></i>Veri Ekle (Excel / CSV / GeoJSON)</span>
+            </div>
+            <p class="text-[11px] text-slate-400">
+              Koordinat içeren Excel (.xlsx, .xls), CSV (MikroPPM vb.) veya GeoJSON dosyalarınızı yükleyin.
+            </p>
+            
+            <div class="flex gap-2 pt-1">
+              <label class="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs rounded-lg transition text-center cursor-pointer shadow flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-upload"></i> Dosya Seç
+                <input type="file" id="file-input" accept=".geojson,.json,.csv,.xlsx,.xls" onchange="handleFileUpload(event)" class="hidden">
+              </label>
+              <button onclick="downloadSampleCSVTemplate()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition text-xs flex items-center gap-1 border border-slate-700" title="Örnek CSV / Excel Şablonu İndir">
+                <i class="fa-solid fa-file-excel text-emerald-400"></i> Şablon
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Layers List -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold text-slate-300 text-xs uppercase tracking-wider">Aktif Katmanlar</span>
+              <span id="layer-count-badge" class="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full border border-slate-700">0 Katman</span>
+            </div>
+            <div id="layers-container" class="space-y-2">
+              <div class="text-center py-6 text-slate-500 italic text-[11px] bg-slate-950/40 rounded-xl border border-slate-900">
+                Henüz yüklenmiş katman yok.<br>Yukarıdan dosya yükleyin veya örnek veri butonuna tıklayın.
+              </div>
+            </div>
+          </div>
+
+          <!-- Basemap Selector -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2">
+            <span class="font-semibold text-slate-300 text-xs block mb-1">Altlık Harita Türü</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="changeBasemap('osm')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-left text-[11px] text-slate-300 font-medium">
+                <i class="fa-solid fa-map text-cyan-400 mr-1"></i> OpenStreetMap
+              </button>
+              <button onclick="changeBasemap('satellite')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-left text-[11px] text-slate-300 font-medium">
+                <i class="fa-solid fa-satellite text-amber-400 mr-1"></i> Esri Uydu
+              </button>
+              <button onclick="changeBasemap('dark')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-left text-[11px] text-slate-300 font-medium">
+                <i class="fa-solid fa-moon text-indigo-400 mr-1"></i> Carto Koyu
+              </button>
+              <button onclick="changeBasemap('light')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-left text-[11px] text-slate-300 font-medium">
+                <i class="fa-solid fa-sun text-yellow-400 mr-1"></i> Carto Açık
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 2. DRAW TAB -->
+        <div id="tab-content-draw" class="space-y-4 hidden">
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2">
+            <span class="font-semibold text-slate-200 text-xs block">Vektör Veri Üretim Araçları</span>
+            <p class="text-[11px] text-slate-400">Haritada tıklayarak yeni noktalar, çizgiler veya poligonlar çizin ve öznitelik bilgilerini doldurun.</p>
+          </div>
+
+          <div class="space-y-2">
+            <button onclick="startDrawing('Point')" class="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-left font-medium text-xs flex items-center justify-between text-slate-200 transition">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-location-dot text-cyan-400"></i> Nokta Ekle (Tesis / Ölçüm Noktası)</span>
+              <i class="fa-solid fa-plus text-slate-500"></i>
+            </button>
+            <button onclick="startDrawing('LineString')" class="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-left font-medium text-xs flex items-center justify-between text-slate-200 transition">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-route text-emerald-400"></i> Çizgi Çiz (Yol / Akarsu / Fay Hattı)</span>
+              <i class="fa-solid fa-plus text-slate-500"></i>
+            </button>
+            <button onclick="startDrawing('Polygon')" class="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-left font-medium text-xs flex items-center justify-between text-slate-200 transition">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-draw-polygon text-amber-400"></i> Poligon Çiz (Park / Mahalle / Bölge)</span>
+              <i class="fa-solid fa-plus text-slate-500"></i>
+            </button>
+          </div>
+
+          <div id="drawing-active-box" class="p-3 bg-cyan-950/40 border border-cyan-800/50 rounded-xl hidden text-cyan-300 space-y-2">
+            <div class="flex items-center justify-between font-semibold">
+              <span id="drawing-mode-label"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Çizim Modu Aktif</span>
+              <button onclick="cancelDrawing()" class="text-rose-400 hover:underline text-[11px]">İptal Et</button>
+            </div>
+            <p class="text-[11px] text-cyan-200/80" id="drawing-instructions">
+              Harita üzerine tıklayarak noktaları belirleyin.
+            </p>
+          </div>
+        </div>
+
+        <!-- 3. ANALYSIS TAB -->
+        <div id="tab-content-analysis" class="space-y-4 hidden">
+          
+          <!-- Buffer Analysis -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-2 text-cyan-400 font-semibold text-xs">
+              <i class="fa-solid fa-bullseye text-base"></i>
+              <span>1. Tampon (Buffer) Analizi</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Seçili katmandaki ögelerin etrafında belirlediğiniz mesafede etki alanı bölgesi oluşturur.</p>
+
+            <div class="space-y-2">
+              <div>
+                <label class="block text-[10px] text-slate-400">Hedef Katman</label>
+                <select id="buffer-layer" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[10px] text-slate-400">Mesafe</label>
+                  <input type="number" id="buffer-distance" value="500" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200">
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-400">Birim</label>
+                  <select id="buffer-unit" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200">
+                    <option value="meters">Metre</option>
+                    <option value="kilometers">Kilometre</option>
+                  </select>
+                </div>
+              </div>
+              <button onclick="runBufferAnalysis()" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs rounded-lg transition shadow">
+                <i class="fa-solid fa-play mr-1"></i> Tampon Analizini Çalıştır
+              </button>
+            </div>
+          </div>
+
+          <!-- Intersect Analysis -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-2 text-emerald-400 font-semibold text-xs">
+              <i class="fa-solid fa-object-group text-base"></i>
+              <span>2. Kesişim (Intersect) Analizi</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Nokta katmanı ile bir Alan (Poligon) katmanını üst üste koyarak kesişen elemanları tespit eder.</p>
+
+            <div class="space-y-2">
+              <div>
+                <label class="block text-[10px] text-slate-400">Nokta Katmanı</label>
+                <select id="intersect-points" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400">Poligon / Bölge Katmanı</label>
+                <select id="intersect-polygons" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <button onclick="runIntersectAnalysis()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs rounded-lg transition shadow">
+                <i class="fa-solid fa-filter mr-1"></i> Kesişimi Bul
+              </button>
+            </div>
+          </div>
+
+          <!-- Heatmap Analysis -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-2 text-amber-400 font-semibold text-xs">
+              <i class="fa-solid fa-fire text-base"></i>
+              <span>3. Isı Haritası (Heatmap / Yoğunluk)</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Noktasal verilerin (PPM, sıcaklık, kirlilik) mekansal yoğunluğunu renkli gradyan ile gösterir.</p>
+
+            <div class="space-y-2">
+              <div>
+                <label class="block text-[10px] text-slate-400">Nokta Katmanı</label>
+                <select id="heatmap-layer" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <button onclick="runHeatmapAnalysis()" class="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs rounded-lg transition shadow">
+                <i class="fa-solid fa-chart-density-line mr-1"></i> Isı Haritası Oluştur
+              </button>
+            </div>
+          </div>
+
+          <!-- Centroid Analysis -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-2 text-cyan-400 font-semibold text-xs">
+              <i class="fa-solid fa-crosshairs text-base"></i>
+              <span>4. Ağırlık Merkezi (Centroid)</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Seçili tesislerin coğrafi veya nüfus ağırlıklı merkezi noktasını hesaplar.</p>
+
+            <div class="space-y-2">
+              <div>
+                <label class="block text-[10px] text-slate-400">Hedef Katman</label>
+                <select id="centroid-layer" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <button onclick="runCentroidAnalysis()" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs rounded-lg transition shadow">
+                <i class="fa-solid fa-compass mr-1"></i> Ağırlık Merkezini Bul
+              </button>
+            </div>
+          </div>
+
+          <!-- Spatial Interpolation (IDW) Analysis -->
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex items-center space-x-2 text-purple-400 font-semibold text-xs">
+              <i class="fa-solid fa-layer-group text-base"></i>
+              <span>5. Mekansal İnterpolasyon (IDW)</span>
+            </div>
+            <p class="text-[11px] text-slate-400">Noktasal MikroPPM veya sıcaklık ölçümlerinden tüm alan için kesintisiz tahmin yüzeyi üretir.</p>
+
+            <div class="space-y-2">
+              <div>
+                <label class="block text-[10px] text-slate-400">Nokta Katmanı</label>
+                <select id="interpolate-layer" onchange="updateInterpolateAttributeDropdown()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400">Hesaplanacak Sütun (PPM / Değer)</label>
+                <select id="interpolate-attribute" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200"></select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[10px] text-slate-400">Çözünürlük (Izgara)</label>
+                  <select id="interpolate-grid-size" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200">
+                    <option value="15">Hızlı (15x15)</option>
+                    <option value="25" selected>Dengeli (25x25)</option>
+                    <option value="40">Detaylı (40x40)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] text-slate-400">Mesafe Gücü (p)</label>
+                  <select id="interpolate-power" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200">
+                    <option value="1">1 (Yumuşak)</option>
+                    <option value="2" selected>2 (Standart)</option>
+                    <option value="3">3 (Lokal)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-[10px] text-slate-400">Renk Paleti</label>
+                <select id="interpolate-palette" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-200">
+                  <option value="spectral">Sıcaklık / PPM (Mavi - Yeşil - Kırmızı)</option>
+                  <option value="viridis">Viridis (Mor - Yeşil - Sarı)</option>
+                  <option value="ocean">Su / Çevre (Koyu Mavi - Açık Mavi)</option>
+                </select>
+              </div>
+              <button onclick="runInterpolationAnalysis()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs rounded-lg transition shadow flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-chart-area"></i> İnterpolasyon Yüzeyi Üret
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 4. SCENARIOS TAB -->
+        <div id="tab-content-scenarios" class="space-y-4 hidden">
+          <div class="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-2">
+            <span class="font-semibold text-slate-200 text-xs block">Müfredat Uyumlu CBS Atölye Senaryoları</span>
+            <p class="text-[11px] text-slate-400">Derslerde veya projelerde doğrudan uygulayabileceğiniz hazır problem senaryoları.</p>
+          </div>
+
+          <!-- Scenario PPM -->
+          <div class="p-3.5 bg-amber-950/30 rounded-xl border border-amber-800/40 space-y-2">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-xs text-amber-400">🔬 Senaryo: MikroPPM Kirlilik Dağılım Haritası</h3>
+              <span class="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded text-[10px]">Çevre Projesi</span>
+            </div>
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              <b>Amaç:</b> Toprak/su kaynaklarındaki mikrokirletici (PPM) değerlerini haritalayıp IDW interpolasyonu ile yüksek riskli alanları belirlemek.
+            </p>
+            <ol class="list-decimal list-inside space-y-1 text-slate-300 bg-slate-900/80 p-2 rounded-lg border border-slate-800 text-[11px]">
+              <li>Üstteki <b>"MikroPPM Veri Seti"</b> butonuna tıklayın.</li>
+              <li>Analizler sekmesinden <b>5. Mekansal İnterpolasyon (IDW)</b> seçin.</li>
+              <li>PPM kirlilik alanlarını haritada izoterm eğrileri olarak inceleyin.</li>
+            </ol>
+          </div>
+
+          <!-- Scenario 1 -->
+          <div class="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-xs text-rose-400">🚨 Senaryo 1: Deprem Toplanma Alanı Tampon Analizi</h3>
+              <span class="bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded text-[10px]">10. Sınıf</span>
+            </div>
+            <p class="text-slate-400 text-[11px] leading-relaxed">
+              <b>Amaç:</b> Liselerin 500 metre yarıçapında yer alan acil toplanma alanlarının yeterliliğini ölçmek.
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Attribute Table Toggle Button -->
+      <div class="p-2 border-t border-slate-800 bg-slate-950">
+        <button onclick="toggleAttributeTable()" class="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-lg border border-slate-800 flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-table"></i> Öznitelik Tablosunu Göster / Gizle
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Map Container -->
+    <div class="flex-1 h-full relative min-w-0 min-h-0">
+      <div id="map" class="w-full h-full min-h-[300px]"></div>
+
+      <!-- Coordinates & Scale Status Bar -->
+      <div class="absolute bottom-3 right-3 glass-panel px-3 py-1.5 rounded-lg text-[11px] text-slate-300 z-[1000] flex items-center gap-3 shadow-lg pointer-events-none">
+        <div><i class="fa-solid fa-compass text-cyan-400 mr-1"></i> <span id="mouse-coords">38.4192 N, 27.1287 E</span></div>
+        <div class="w-px h-3 bg-slate-700"></div>
+        <div><i class="fa-solid fa-magnifying-glass-location text-amber-400 mr-1"></i> Zoom: <span id="zoom-level">12</span></div>
+      </div>
+    </div>
+
+    <!-- Bottom Floating Attribute Table Drawer -->
+    <div id="attribute-drawer" class="absolute bottom-0 left-80 right-0 h-64 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 z-[1001] transform translate-y-full transition-transform duration-300 flex flex-col shadow-2xl">
+      <div class="h-10 bg-slate-950 px-4 flex items-center justify-between border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+          <span class="font-semibold text-xs text-slate-200"><i class="fa-solid fa-table text-cyan-400 mr-1.5"></i>Öznitelik Tablosu Veri Süzgeci</span>
+          <select id="attr-table-layer-select" onchange="renderAttributeTable()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded px-2 py-0.5">
+          </select>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="exportAttributeTableCSV()" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[11px] font-medium flex items-center gap-1 transition">
+            <i class="fa-solid fa-file-csv"></i> CSV Aktar
+          </button>
+          <button onclick="toggleAttributeTable()" class="text-slate-400 hover:text-white px-2 py-1 text-sm">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-auto p-2">
+        <table id="attr-table" class="w-full text-left text-xs text-slate-300 border-collapse">
+          <thead id="attr-table-head" class="bg-slate-950 sticky top-0 text-slate-400 font-semibold border-b border-slate-800">
+          </thead>
+          <tbody id="attr-table-body" class="divide-y divide-slate-800/60">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Layer Coordinate Repair & Column Mapping Modal -->
+  <div id="repair-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[2050] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-amber-400 flex items-center gap-2">
+          <i class="fa-solid fa-wrench"></i> Katman Koordinat Düzeltme / Onarım
+        </h3>
+        <button onclick="closeRepairModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <p class="text-slate-300 leading-relaxed">
+          Noktaların haritada yanlış yere düşmesi genellikle <b>Enlem/Boylam sütunlarının ters eşleşmesinden</b>, <b>virgüllü sayı formatından</b> veya <b>UTM metre koordinatlarından</b> kaynaklanır.
+        </p>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Enlem (Latitude / Y) Sütunu</label>
+          <select id="repair-lat-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200"></select>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Boylam (Longitude / X) Sütunu</label>
+          <select id="repair-lng-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200"></select>
+        </div>
+
+        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+          <span class="font-semibold text-cyan-300 block">Hızlı Onarım İşlemleri:</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="applyManualSwap()" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 text-left font-medium">
+              <i class="fa-solid fa-arrows-rotate text-amber-400 mr-1"></i> X/Y (Lat/Lng) Takas Et
+            </button>
+            <button onclick="applyUTMToWGSConversion()" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 text-left font-medium">
+              <i class="fa-solid fa-ruler-combined text-emerald-400 mr-1"></i> UTM Metre -> DERECE
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+        <button onclick="closeRepairModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">Kapat</button>
+        <button onclick="applyCustomColumnMapping()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium shadow">Seçili Sütunlarla Yeniden Oluştur</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature Property Input Modal -->
+  <div id="feature-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[2000] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-cyan-400 flex items-center gap-2">
+          <i class="fa-solid fa-pen-to-square"></i> Yeni Detay Öznitelik Bilgileri
+        </h3>
+        <button onclick="closeFeatureModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Eklenecek Katman</label>
+          <select id="feature-target-layer" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200"></select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Detay / Tesis Adı</label>
+          <input type="text" id="feature-name-input" placeholder="Örn: Ölçüm İstasyonu A-1" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 mb-1">Kategori</label>
+            <input type="text" id="feature-category-input" placeholder="Örn: Numune, İstasyon" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Sayısal Değer / PPM Değeri</label>
+            <input type="number" id="feature-value-input" value="45.2" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200">
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Açıklama / Notlar</label>
+          <textarea id="feature-desc-input" rows="2" placeholder="Detaylı bilgi veya gözlem notları..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+        <button onclick="closeFeatureModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">İptal</button>
+        <button onclick="saveDrawnFeature()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium shadow">Kaydet ve Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help & Info Modal -->
+  <div id="help-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[2000] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-cyan-400 flex items-center gap-2">
+          <i class="fa-solid fa-graduation-cap"></i> Web CBS Laboratuvarı Kullanım Rehberi
+        </h3>
+        <button onclick="toggleHelpModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-300 leading-relaxed max-h-80 overflow-y-auto pr-1">
+        <p><b>Hoş Geldiniz!</b> Bu uygulama, lise coğrafya derslerinde mekansal analiz yapmanızı ve TÜBİTAK projelerinde verilerinizi haritalandırmanızı sağlar.</p>
+        
+        <div class="bg-slate-950 p-3 rounded-xl space-y-2 border border-slate-800">
+          <h4 class="font-semibold text-amber-300">📍 Koordinat Sorunları Nasıl Çözülür?</h4>
+          <p class="text-[11px] text-slate-400">
+            CSV / Excel yüklediğinizde noktalar doğru yere gelmiyorsa katman yanındaki <i class="fa-solid fa-wrench text-amber-400"></i> butonuna basıp sütunları manuel eşleştirebilir veya X/Y koordinatlarını değiştirebilirsiniz.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end pt-2 border-t border-slate-800">
+        <button onclick="toggleHelpModal()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium">Anladım</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Alert Toast Box -->
+  <div id="alert-box" class="fixed top-16 right-4 z-[3000] hidden transition-all duration-300 max-w-sm">
+    <div id="alert-content" class="px-4 py-3 rounded-xl border shadow-2xl text-xs flex items-center gap-3">
+    </div>
+  </div>
+
+  <script>
+    let map;
+    let currentBasemapLayer = null;
+    let gisLayers = {}; // Store layer GeoJSON datasets
+    let leafletLayers = {}; // Store Leaflet Layer Groups
+    let analysisGroup; // Store temporary analysis graphics
+    let heatmapLayer = null;
+    let activeRepairLayerId = null;
+
+    // Drawing state
+    let isDrawing = false;
+    let drawMode = null; // 'Point', 'LineString', 'Polygon'
+    let tempDrawPoints = [];
+    let tempDrawPreview = null;
+    let pendingDrawnFeature = null;
+
+    // Basemaps configuration dictionary with subdomains and fallback
+    const basemapConfigs = {
+      osm: {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        options: {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+          subdomains: ['a', 'b', 'c'],
+          maxZoom: 19
+        }
+      },
+      satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        options: {
+          attribution: 'Tiles &copy; Esri',
+          maxZoom: 18
+        }
+      },
+      dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        options: {
+          attribution: '&copy; CARTO &copy; OpenStreetMap',
+          subdomains: 'abcd',
+          maxZoom: 20
+        }
+      },
+      light: {
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        options: {
+          attribution: '&copy; CARTO &copy; OpenStreetMap',
+          subdomains: 'abcd',
+          maxZoom: 20
+        }
+      }
+    };
+
+    // Safe and immediate application initialization
+    function initApp() {
+      if (map) return; // Prevent double initialization
+
+      // Initialize Leaflet Map centered on Izmir / Turkey
+      map = L.map('map', {
+        center: [38.4192, 27.1287],
+        zoom: 11,
+        zoomControl: false
+      });
+
+      // Add default basemap safely
+      changeBasemap('dark');
+
+      // Add Zoom control top-right
+      L.control.zoom({ position: 'topright' }).addTo(map);
+
+      // Force canvas size updates to prevent blank/gray map in iframe previews
+      const invalidate = () => {
+        if (map) map.invalidateSize();
+      };
+      
+      invalidate();
+      setTimeout(invalidate, 100);
+      setTimeout(invalidate, 400);
+      setTimeout(invalidate, 1000);
+
+      window.addEventListener('resize', invalidate);
+
+      // Analysis Layer Group
+      analysisGroup = L.layerGroup().addTo(map);
+
+      // Event listeners for coordinates
+      map.on('mousemove', function(e) {
+        document.getElementById('mouse-coords').innerText = `${e.latlng.lat.toFixed(4)} N, ${e.latlng.lng.toFixed(4)} E`;
+      });
+
+      map.on('zoomend', function() {
+        document.getElementById('zoom-level').innerText = map.getZoom();
+      });
+
+      // Click listener for custom drawing logic
+      map.on('click', handleMapClick);
+
+      // Load initial sample dataset for instant interactive preview
+      loadSampleData();
+    }
+
+    // Trigger init regardless of DOM loading state
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(initApp, 10);
+    } else {
+      document.addEventListener('DOMContentLoaded', initApp);
+      window.addEventListener('load', initApp);
+    }
+
+    function exportWorkspaceJSON() {
+      if (Object.keys(gisLayers).length === 0) {
+        showAlert("Uyarı", "Dışa aktarılacak aktif bir katman bulunmuyor.", "info");
+        return;
+      }
+
+      const workspaceData = {
+        title: "Lise CBS Laboratuvarı Projesi",
+        createdAt: new Date().toISOString(),
+        gisLayers: gisLayers
+      };
+
+      const jsonString = JSON.stringify(workspaceData, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cbs_projesi_${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showAlert("Proje Dışa Aktarıldı", "Tüm katman ve verileriniz proje dosyası olarak indirildi.", "success");
+    }
+
+    function importWorkspaceJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          if (importedData && importedData.gisLayers) {
+            // Clear current map layers
+            Object.keys(gisLayers).forEach(id => removeLayer(id));
+
+            // Load imported layers
+            gisLayers = importedData.gisLayers;
+            Object.keys(gisLayers).forEach(id => {
+              gisLayers[id].visible = true;
+              renderLeafletLayer(id);
+            });
+
+            renderLayersListUI();
+            updateSelectDropdowns();
+            renderAttributeTable();
+
+            showAlert("Proje Yüklendi", "Paylaşılan katmanlar haritaya aktarıldı.", "success");
+          } else {
+            showAlert("Hata", "Geçersiz veya uyumsuz proje dosyası.", "error");
+          }
+        } catch(err) {
+          showAlert("Hata", "Dosya okunamadı.", "error");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function changeBasemap(type) {
+      if (currentBasemapLayer && map.hasLayer(currentBasemapLayer)) {
+        map.removeLayer(currentBasemapLayer);
+      }
+
+      const config = basemapConfigs[type] || basemapConfigs.dark;
+      currentBasemapLayer = L.tileLayer(config.url, config.options);
+
+      currentBasemapLayer.on('tileerror', function() {
+        console.warn('Altlık harita karoları yüklenemedi, yedek sunucu kullanılıyor...');
+      });
+
+      currentBasemapLayer.addTo(map);
+      map.invalidateSize();
+    }
+
+    function loadSampleData() {
+      const sampleSchools = {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { name: "Izmir Ataturk Lisesi", category: "Okul", value: 24.5, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.1287, 38.4145] } },
+          { type: "Feature", properties: { name: "Bornova Anadolu Lisesi", category: "Okul", value: 22.1, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.2185, 38.4621] } },
+          { type: "Feature", properties: { name: "Buca Inonu Anadolu Lisesi", category: "Okul", value: 26.2, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.1691, 38.3852] } },
+          { type: "Feature", properties: { name: "Karsiyaka Lisesi", category: "Okul", value: 21.8, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.1121, 38.4555] } },
+          { type: "Feature", properties: { name: "Balcova Anadolu Lisesi", category: "Okul", value: 23.9, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.0543, 38.3912] } },
+          { type: "Feature", properties: { name: "Gaziemir Salih Isgoren Lisesi", category: "Okul", value: 27.4, city: "Izmir" }, geometry: { type: "Point", coordinates: [27.1298, 38.3241] } }
+        ]
+      };
+
+      addLayerToGIS("Okullar & İstasyonlar", sampleSchools, "#06b6d4", "Point");
+      showAlert("Örnek Veri Yüklendi", "İzmir Okul ve İstasyon verisi eklendi.", "success");
+    }
+
+    function loadPPMData() {
+      const ppmSampleRows = [
+        { istasyon_adi: "Alsancak Numune 1", ppm_degeri: 128.4, latitude: 38.4382, longitude: 27.1411, tip: "MikroPPM Toprak" },
+        { istasyon_adi: "Bornova Sanayi Numune 2", ppm_degeri: 345.1, latitude: 38.4510, longitude: 27.2082, tip: "MikroPPM Toprak" },
+        { istasyon_adi: "Buca Gölet Numune 3", ppm_degeri: 64.2, latitude: 38.3751, longitude: 27.1890, tip: "MikroPPM Toprak" },
+        { istasyon_adi: "Gaziemir Serbest Bölge 4", ppm_degeri: 412.8, latitude: 38.3312, longitude: 27.1350, tip: "MikroPPM Hava" },
+        { istasyon_adi: "Karşıyaka İskele Numune 5", ppm_degeri: 95.6, latitude: 38.4552, longitude: 27.1101, tip: "MikroPPM Su" },
+        { istasyon_adi: "Çiğli OSB Numune 6", ppm_degeri: 389.0, latitude: 38.4920, longitude: 27.0512, tip: "MikroPPM Su" }
+      ];
+
+      processTabularData("MikroPPMSon.csv", ppmSampleRows);
+      showAlert("MikroPPM Veri Seti Yüklendi", "Numune ölçüm verileri haritaya başarıyla yerleştirildi.", "success");
+    }
+
+    function addLayerToGIS(name, geojson, color = "#06b6d4", type = "Point", originalRows = null) {
+      const id = 'layer_' + Date.now();
+      
+      gisLayers[id] = {
+        id: id,
+        name: name,
+        data: geojson,
+        color: color,
+        type: type,
+        visible: true,
+        originalRows: originalRows
+      };
+
+      renderLeafletLayer(id);
+      renderLayersListUI();
+      updateSelectDropdowns();
+      renderAttributeTable();
+    }
+
+    function renderLeafletLayer(id) {
+      if (leafletLayers[id]) {
+        map.removeLayer(leafletLayers[id]);
+      }
+
+      const layerObj = gisLayers[id];
+      if (!layerObj.visible) return;
+
+      const group = L.geoJSON(layerObj.data, {
+        pointToLayer: function(f, latlng) {
+          const val = parseFloat(f.properties.ppm_degeri || f.properties.value || f.properties.deger || 0);
+          let markerColor = layerObj.color;
+          
+          if (val > 300) markerColor = "#ef4444";
+          else if (val > 150) markerColor = "#f59e0b";
+
+          return L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: markerColor,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
+          });
+        },
+        style: function(f) {
+          return {
+            color: layerObj.color,
+            weight: 3,
+            opacity: 0.8,
+            fillColor: layerObj.color,
+            fillOpacity: 0.35
+          };
+        },
+        onEachFeature: function(feature, layer) {
+          let popupContent = `<div class="p-1 space-y-1 text-slate-900 text-xs font-sans">`;
+          popupContent += `<b class="text-cyan-700 text-sm block">${feature.properties.name || feature.properties.istasyon_adi || 'Detay'}</b>`;
+          for (let key in feature.properties) {
+            if (key !== 'name' && key !== 'istasyon_adi') {
+              popupContent += `<div><span class="text-slate-500 font-semibold">${key}:</span> ${feature.properties[key]}</div>`;
+            }
+          }
+          popupContent += `<div class="pt-1 text-[10px] text-slate-400 font-mono">Koord: ${feature.geometry.coordinates[1].toFixed(5)}, ${feature.geometry.coordinates[0].toFixed(5)}</div>`;
+          popupContent += `</div>`;
+          layer.bindPopup(popupContent);
+        }
+      });
+
+      leafletLayers[id] = group;
+      group.addTo(map);
+
+      try {
+        map.fitBounds(group.getBounds(), { padding: [30, 30] });
+      } catch(e) {}
+    }
+
+    function renderLayersListUI() {
+      const container = document.getElementById('layers-container');
+      const countBadge = document.getElementById('layer-count-badge');
+      const layerKeys = Object.keys(gisLayers);
+
+      countBadge.innerText = `${layerKeys.length} Katman`;
+
+      if (layerKeys.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 text-slate-500 italic text-[11px] bg-slate-950/40 rounded-xl border border-slate-900">
+            Henüz yüklenmiş katman yok.<br>Yukarıdan dosya yükleyin veya örnek veri butonuna tıklayın.
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = layerKeys.map(id => {
+        const l = gisLayers[id];
+        return `
+          <div class="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between">
+            <div class="flex items-center space-x-2 overflow-hidden">
+              <input type="checkbox" ${l.visible ? 'checked' : ''} onchange="toggleLayerVisibility('${id}')" class="rounded border-slate-700 bg-slate-900 text-cyan-500">
+              <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${l.color}"></span>
+              <span class="font-medium text-slate-200 truncate text-xs" title="${l.name}">${l.name}</span>
+            </div>
+            <div class="flex items-center space-x-1 flex-shrink-0">
+              <button onclick="openRepairModal('${id}')" class="text-amber-400 hover:text-amber-300 p-1" title="Koordinat Düzelt / Sütun Eşleştir (Repair Tool)"><i class="fa-solid fa-wrench"></i></button>
+              <button onclick="swapLayerCoordinates('${id}')" class="text-slate-400 hover:text-cyan-400 p-1" title="Enlem / Boylam Yönünü Ters Çevir (Swap Lat/Lng)"><i class="fa-solid fa-arrows-rotate"></i></button>
+              <button onclick="zoomToLayer('${id}')" class="text-slate-400 hover:text-cyan-400 p-1" title="Katmana Odaklan"><i class="fa-solid fa-expand"></i></button>
+              <button onclick="removeLayer('${id}')" class="text-slate-400 hover:text-rose-400 p-1" title="Katmanı Sil"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Helper function to safely parse numerical coordinates (handles Turkish comma decimals like 38,4145)
+    function parseCoordinate(val) {
+      if (val === null || val === undefined) return NaN;
+      if (typeof val === 'number') return val;
+      let str = String(val).trim().replace(',', '.');
+      return parseFloat(str);
+    }
+
+    // Converts UTM Zone 35N/36N Metres (ED50 / ITRF96) to WGS84 Lat/Lng Degrees
+    function utmToWgs84(easting, northing, zone = 35, northernHemisphere = true) {
+      const a = 6378137.0; // WGS84 semi-major axis
+      const eccSquared = 0.00669438;
+      const k0 = 0.9996;
+
+      let x = easting - 500000.0;
+      let y = northing;
+      if (!northernHemisphere) y -= 10000000.0;
+
+      const longOrigin = (zone - 1) * 6 - 180 + 3;
+      const eccPrimeSquared = eccSquared / (1 - eccSquared);
+      const M = y / k0;
+      const mu = M / (a * (1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * Math.pow(eccSquared, 3) / 256));
+
+      const phi1Rad = mu + (3 * Math.E / 2 - 27 * Math.pow(Math.E, 3) / 32) * Math.sin(2 * mu)
+        + (21 * Math.pow(Math.E, 2) / 16 - 55 * Math.pow(Math.E, 4) / 32) * Math.sin(4 * mu);
+
+      const N1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad));
+      const T1 = Math.tan(phi1Rad) * Math.tan(phi1Rad);
+      const C1 = eccPrimeSquared * Math.cos(phi1Rad) * Math.cos(phi1Rad);
+      const R1 = a * (1 - eccSquared) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad), 1.5);
+      const D = x / (N1 * k0);
+
+      let lat = phi1Rad - (N1 * Math.tan(phi1Rad) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) * Math.pow(D, 4) / 24);
+      lat = lat * (180 / Math.PI);
+
+      let lng = (D - (1 + 2 * T1 + C1) * Math.pow(D, 3) / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * eccPrimeSquared + 24 * T1 * T1) * Math.pow(D, 5) / 120) / Math.cos(phi1Rad);
+      lng = longOrigin + lng * (180 / Math.PI);
+
+      return { lat: lat, lng: lng };
+    }
+
+    // Universal Robust Tabular Data Parser (Supports PPM, CSV, XLSX, Turkish Column Aliases)
+    function processTabularData(fileName, rows) {
+      if (!rows || rows.length === 0) {
+        showAlert("Hata", "Dosyada okunabilir veri bulunamadı.", "error");
+        return;
+      }
+
+      const sampleRow = rows[0];
+      let latKey = null;
+      let lngKey = null;
+
+      const keys = Object.keys(sampleRow);
+
+      // 1. Search for explicit column name matches
+      for (let key of keys) {
+        const k = key.toLowerCase().trim().replace(/[^a-z0-9_ğüşıöç]/g, '');
+        if (['lat', 'latitude', 'enlem', 'y', 'northing', 'kuzey', 'y_enlem', 'koordinat_y', 'n', 'ppm_y', 'y_m'].includes(k)) latKey = key;
+        if (['lng', 'lon', 'longitude', 'boylam', 'x', 'easting', 'doğu', 'dogu', 'x_boylam', 'koordinat_x', 'e', 'ppm_x', 'x_m'].includes(k)) lngKey = key;
+      }
+
+      // 2. Fallback: Identify numeric columns
+      if (!latKey || !lngKey) {
+        const numericKeys = keys.filter(k => !isNaN(parseCoordinate(sampleRow[k])));
+        if (numericKeys.length >= 2) {
+          latKey = numericKeys[0];
+          lngKey = numericKeys[1];
+        }
+      }
+
+      if (!latKey || !lngKey) {
+        showAlert("Koordinat Eksik", "Tabloda Enlem (Latitude) ve Boylam (Longitude) sütunları algılanamadı.", "error");
+        return;
+      }
+
+      let sampleLat = parseCoordinate(sampleRow[latKey]);
+      let sampleLng = parseCoordinate(sampleRow[lngKey]);
+      
+      let isUtm = false;
+      if (sampleLat > 100000 || sampleLng > 100000) {
+        isUtm = true;
+      }
+
+      let shouldAutoSwap = false;
+      if (!isUtm && (sampleLat >= 25 && sampleLat <= 45) && (sampleLng >= 35 && sampleLng <= 43) && !(sampleLat >= 35 && sampleLat <= 43)) {
+        shouldAutoSwap = true;
+      }
+
+      const features = [];
+      rows.forEach(row => {
+        let lat = parseCoordinate(row[latKey]);
+        let lng = parseCoordinate(row[lngKey]);
+
+        if (isUtm) {
+          let easting = lng > lat ? lng : lat;
+          let northing = lng > lat ? lat : lng;
+          let converted = utmToWgs84(easting, northing, 35, true);
+          lat = converted.lat;
+          lng = converted.lng;
+        } else if (shouldAutoSwap) {
+          const temp = lat;
+          lat = lng;
+          lng = temp;
+        }
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          features.push({
+            type: "Feature",
+            properties: row,
+            geometry: {
+              type: "Point",
+              coordinates: [lng, lat]
+            }
+          });
+        }
+      });
+
+      const geojson = { type: "FeatureCollection", features: features };
+      let statusMsg = `${features.length} adet nokta haritaya yerleştirildi.`;
+      
+      if (isUtm) statusMsg += " (UTM Metre -> Coğrafi Derece dönüştürüldü)";
+      else if (shouldAutoSwap) statusMsg += " (Enlem/Boylam yönü düzeltildi)";
+
+      addLayerToGIS(fileName, geojson, "#f59e0b", "Point", rows);
+      showAlert("Tablo Yüklendi", statusMsg, "success");
+    }
+
+    function swapLayerCoordinates(id) {
+      if (!gisLayers[id] || !gisLayers[id].data) return;
+
+      const features = gisLayers[id].data.features;
+      let count = 0;
+      features.forEach(f => {
+        if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates && f.geometry.coordinates.length >= 2) {
+          const origLng = f.geometry.coordinates[0];
+          const origLat = f.geometry.coordinates[1];
+          f.geometry.coordinates[0] = origLat;
+          f.geometry.coordinates[1] = origLng;
+          count++;
+        }
+      });
+
+      renderLeafletLayer(id);
+      renderAttributeTable();
+      showAlert("Koordinatlar Takas Edildi", `${gisLayers[id].name} katmanının Enlem ve Boylam değerleri yer değiştirdi (${count} nokta).`, "info");
+    }
+
+    function openRepairModal(id) {
+      activeRepairLayerId = id;
+      const layer = gisLayers[id];
+      if (!layer) return;
+
+      const modal = document.getElementById('repair-modal');
+      const latSelect = document.getElementById('repair-lat-select');
+      const lngSelect = document.getElementById('repair-lng-select');
+
+      let sampleProps = {};
+      if (layer.originalRows && layer.originalRows.length > 0) {
+        sampleProps = layer.originalRows[0];
+      } else if (layer.data.features && layer.data.features.length > 0) {
+        sampleProps = layer.data.features[0].properties;
+      }
+
+      const keys = Object.keys(sampleProps);
+      const optionsHtml = keys.map(k => `<option value="${k}">${k} (Örn: ${sampleProps[k]})</option>`).join('');
+
+      latSelect.innerHTML = optionsHtml;
+      lngSelect.innerHTML = optionsHtml;
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeRepairModal() {
+      document.getElementById('repair-modal').classList.add('hidden');
+      activeRepairLayerId = null;
+    }
+
+    function applyManualSwap() {
+      if (activeRepairLayerId) {
+        swapLayerCoordinates(activeRepairLayerId);
+        closeRepairModal();
+      }
+    }
+
+    function applyUTMToWGSConversion() {
+      if (!activeRepairLayerId || !gisLayers[activeRepairLayerId]) return;
+      const layer = gisLayers[activeRepairLayerId];
+
+      let count = 0;
+      layer.data.features.forEach(f => {
+        const coords = f.geometry.coordinates;
+        let x = coords[0];
+        let y = coords[1];
+
+        if (x > 100000 || y > 100000) {
+          let easting = x > y ? x : y;
+          let northing = x > y ? y : x;
+          let conv = utmToWgs84(easting, northing, 35, true);
+          f.geometry.coordinates = [conv.lng, conv.lat];
+          count++;
+        }
+      });
+
+      renderLeafletLayer(activeRepairLayerId);
+      renderAttributeTable();
+      closeRepairModal();
+      showAlert("UTM Dönüşümü Yapıldı", `${count} adet nokta UTM metresinden coğrafi dereceye dönüştürüldü.`, "success");
+    }
+
+    function applyCustomColumnMapping() {
+      if (!activeRepairLayerId || !gisLayers[activeRepairLayerId]) return;
+      const layer = gisLayers[activeRepairLayerId];
+      
+      const latCol = document.getElementById('repair-lat-select').value;
+      const lngCol = document.getElementById('repair-lng-select').value;
+
+      const rows = layer.originalRows || layer.data.features.map(f => f.properties);
+
+      const features = [];
+      rows.forEach(row => {
+        let lat = parseCoordinate(row[latCol]);
+        let lng = parseCoordinate(row[lngCol]);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          features.push({
+            type: "Feature",
+            properties: row,
+            geometry: {
+              type: "Point",
+              coordinates: [lng, lat]
+            }
+          });
+        }
+      });
+
+      layer.data = { type: "FeatureCollection", features: features };
+      renderLeafletLayer(activeRepairLayerId);
+      renderAttributeTable();
+      closeRepairModal();
+      showAlert("Katman Güncellendi", `Sütunlar eşleştirilerek ${features.length} nokta haritaya dizildi.`, "success");
+    }
+
+    function toggleLayerVisibility(id) {
+      if (gisLayers[id]) {
+        gisLayers[id].visible = !gisLayers[id].visible;
+        renderLeafletLayer(id);
+      }
+    }
+
+    function zoomToLayer(id) {
+      if (leafletLayers[id]) {
+        try {
+          map.fitBounds(leafletLayers[id].getBounds(), { padding: [30, 30] });
+        } catch(e) {}
+      }
+    }
+
+    function removeLayer(id) {
+      if (leafletLayers[id]) map.removeLayer(leafletLayers[id]);
+      delete gisLayers[id];
+      delete leafletLayers[id];
+      renderLayersListUI();
+      updateSelectDropdowns();
+      renderAttributeTable();
+    }
+
+    function updateSelectDropdowns() {
+      const bufferSelect = document.getElementById('buffer-layer');
+      const intersectPtsSelect = document.getElementById('intersect-points');
+      const intersectPolySelect = document.getElementById('intersect-polygons');
+      const heatmapSelect = document.getElementById('heatmap-layer');
+      const centroidSelect = document.getElementById('centroid-layer');
+      const interpolateSelect = document.getElementById('interpolate-layer');
+      const targetLayerSelect = document.getElementById('feature-target-layer');
+
+      const optionsHtml = Object.values(gisLayers).map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+
+      bufferSelect.innerHTML = optionsHtml;
+      centroidSelect.innerHTML = optionsHtml;
+      targetLayerSelect.innerHTML = optionsHtml;
+
+      intersectPtsSelect.innerHTML = Object.values(gisLayers).filter(l => l.type === 'Point').map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      intersectPolySelect.innerHTML = Object.values(gisLayers).filter(l => l.type === 'Polygon').map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      heatmapSelect.innerHTML = Object.values(gisLayers).filter(l => l.type === 'Point').map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      interpolateSelect.innerHTML = Object.values(gisLayers).filter(l => l.type === 'Point').map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+
+      updateInterpolateAttributeDropdown();
+    }
+
+    function updateInterpolateAttributeDropdown() {
+      const selectLayerId = document.getElementById('interpolate-layer')?.value;
+      const attrSelect = document.getElementById('interpolate-attribute');
+      if (!attrSelect) return;
+
+      if (!selectLayerId || !gisLayers[selectLayerId] || !gisLayers[selectLayerId].data?.features?.length) {
+        attrSelect.innerHTML = '<option value="">Sütun Bulunamadı</option>';
+        return;
+      }
+
+      const features = gisLayers[selectLayerId].data.features;
+      const sampleProps = features[0].properties || {};
+      const keys = Object.keys(sampleProps);
+
+      const numericKeys = keys.filter(k => {
+        return features.some(f => !isNaN(parseCoordinate(f.properties[k])));
+      });
+
+      if (numericKeys.length === 0) {
+        attrSelect.innerHTML = '<option value="">Sayısal Sütun Yok</option>';
+        return;
+      }
+
+      attrSelect.innerHTML = numericKeys.map(k => `<option value="${k}">${k}</option>`).join('');
+
+      const preferred = numericKeys.find(k => {
+        const lk = k.toLowerCase();
+        return lk.includes('ppm') || lk.includes('deger') || lk.includes('val') || lk.includes('miktar');
+      });
+      if (preferred) {
+        attrSelect.value = preferred;
+      }
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const fileName = file.name;
+      const ext = fileName.split('.').pop().toLowerCase();
+
+      if (ext === 'geojson' || ext === 'json') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const geojson = JSON.parse(e.target.result);
+            addLayerToGIS(fileName, geojson, "#10b981", detectGeoJSONType(geojson));
+            showAlert("Başarılı", `${fileName} katmanı eklendi.`, "success");
+          } catch(err) {
+            showAlert("Hata", "Geçersiz GeoJSON dosyası.", "error");
+          }
+        };
+        reader.readAsText(file);
+      } else if (ext === 'csv') {
+        Papa.parse(file, {
+          header: true,
+          dynamicTyping: true,
+          complete: function(results) {
+            processTabularData(fileName, results.data);
+          }
+        });
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.SheetNames[0];
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+          processTabularData(fileName, rows);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    }
+
+    function detectGeoJSONType(geojson) {
+      try {
+        const geomType = geojson.features[0].geometry.type;
+        if (geomType.includes('Point')) return 'Point';
+        if (geomType.includes('Polygon')) return 'Polygon';
+        return 'LineString';
+      } catch(e) {
+        return 'Point';
+      }
+    }
+
+    function downloadSampleCSVTemplate() {
+      const csvContent = "data:text/csv;charset=utf-8," + 
+        "istasyon_adi,kategori,ppm_degeri,latitude,longitude,sehir\n" +
+        "Alsancak Numune 1,MikroPPM Toprak,128.4,38.4382,27.1411,İzmir\n" +
+        "Bornova Sanayi Numune 2,MikroPPM Toprak,345.1,38.4510,27.2082,İzmir\n" +
+        "Buca Gölet Numune 3,MikroPPM Toprak,64.2,38.3751,27.1890,İzmir\n" +
+        "Gaziemir Serbest Bölge 4,MikroPPM Hava,412.8,38.3312,27.1350,İzmir";
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "MikroPPMSon_ornek.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function startDrawing(mode) {
+      isDrawing = true;
+      drawMode = mode;
+      tempDrawPoints = [];
+
+      document.getElementById('drawing-active-box').classList.remove('hidden');
+      document.getElementById('drawing-mode-label').innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> ${mode} Çizim Modu`;
+      
+      if (mode === 'Point') {
+        document.getElementById('drawing-instructions').innerText = "Haritada noktayı koymak istediğiniz konuma 1 kez tıklayın.";
+      } else {
+        document.getElementById('drawing-instructions').innerText = "Köşeleri belirlemek için haritaya tıklayın. Çizimi bitirmek için son noktaya çift tıklayın.";
+      }
+    }
+
+    function cancelDrawing() {
+      isDrawing = false;
+      drawMode = null;
+      tempDrawPoints = [];
+      if (tempDrawPreview) map.removeLayer(tempDrawPreview);
+      document.getElementById('drawing-active-box').classList.add('hidden');
+    }
+
+    function handleMapClick(e) {
+      if (!isDrawing) return;
+
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+
+      if (drawMode === 'Point') {
+        pendingDrawnFeature = {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [lng, lat] },
+          properties: {}
+        };
+        cancelDrawing();
+        openFeatureModal();
+      } else {
+        tempDrawPoints.push([lng, lat]);
+        updateDrawPreview();
+      }
+    }
+
+    function updateDrawPreview() {
+      if (tempDrawPreview) map.removeLayer(tempDrawPreview);
+
+      const latlngs = tempDrawPoints.map(p => [p[1], p[0]]);
+
+      if (drawMode === 'LineString') {
+        tempDrawPreview = L.polyline(latlngs, { color: '#06b6d4', weight: 4 }).addTo(map);
+      } else if (drawMode === 'Polygon') {
+        tempDrawPreview = L.polygon(latlngs, { color: '#10b981', weight: 2, fillOpacity: 0.4 }).addTo(map);
+      }
+    }
+
+    map.on('dblclick', function(e) {
+      if (isDrawing && (drawMode === 'LineString' || drawMode === 'Polygon')) {
+        if (tempDrawPoints.length < 2) return;
+
+        pendingDrawnFeature = {
+          type: "Feature",
+          geometry: {
+            type: drawMode,
+            coordinates: drawMode === 'Polygon' ? [[...tempDrawPoints, tempDrawPoints[0]]] : tempDrawPoints
+          },
+          properties: {}
+        };
+
+        cancelDrawing();
+        openFeatureModal();
+      }
+    });
+
+    function openFeatureModal() {
+      document.getElementById('feature-modal').classList.remove('hidden');
+    }
+
+    function closeFeatureModal() {
+      document.getElementById('feature-modal').classList.add('hidden');
+    }
+
+    function saveDrawnFeature() {
+      const targetLayerId = document.getElementById('feature-target-layer').value;
+      const name = document.getElementById('feature-name-input').value || "Yeni Detay";
+      const category = document.getElementById('feature-category-input').value || "Genel";
+      const val = parseFloat(document.getElementById('feature-value-input').value) || 0;
+      const desc = document.getElementById('feature-desc-input').value || "";
+
+      if (!targetLayerId || !gisLayers[targetLayerId]) {
+        showAlert("Hata", "Lütfen geçerli bir hedef katman seçin.", "error");
+        return;
+      }
+
+      pendingDrawnFeature.properties = {
+        name: name,
+        category: category,
+        ppm_degeri: val,
+        description: desc
+      };
+
+      gisLayers[targetLayerId].data.features.push(pendingDrawnFeature);
+      renderLeafletLayer(targetLayerId);
+      renderAttributeTable();
+      closeFeatureModal();
+      showAlert("Kaydedildi", "Çizilen yeni detay katmana eklendi.", "success");
+    }
+
+    function runBufferAnalysis() {
+      const layerId = document.getElementById('buffer-layer').value;
+      const layerData = gisLayers[layerId]?.data;
+
+      if (!layerData) {
+        showAlert("Hata", "Hedef katmanda veri yok.", "error");
+        return;
+      }
+
+      const dist = parseFloat(document.getElementById('buffer-distance').value);
+      const unit = document.getElementById('buffer-unit').value;
+
+      analysisGroup.clearLayers();
+
+      const buffered = turf.buffer(layerData, dist, { units: unit });
+
+      const bufferedLayer = L.geoJSON(buffered, {
+        style: {
+          color: '#06b6d4',
+          weight: 2,
+          fillColor: '#06b6d4',
+          fillOpacity: 0.35,
+          dashArray: '5, 5'
+        }
+      });
+
+      analysisGroup.addLayer(bufferedLayer);
+      map.fitBounds(bufferedLayer.getBounds());
+
+      showAlert("Tampon Analizi Tamamlandı", `${dist} ${unit === 'meters' ? 'metre' : 'km'} etki alanı üretildi.`, "success");
+    }
+
+    function runIntersectAnalysis() {
+      const ptsId = document.getElementById('intersect-points').value;
+      const polyId = document.getElementById('intersect-polygons').value;
+
+      const ptsData = gisLayers[ptsId]?.data;
+      const polyData = gisLayers[polyId]?.data;
+
+      if (!ptsData || !polyData) {
+        showAlert("Hata", "Nokta ve poligon katmanları seçilmelidir.", "error");
+        return;
+      }
+
+      analysisGroup.clearLayers();
+
+      const ptsWithin = turf.pointsWithinPolygon(ptsData, polyData);
+
+      const resultLayer = L.geoJSON(ptsWithin, {
+        pointToLayer: function(f, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 10,
+            fillColor: '#ef4444',
+            color: '#ffffff',
+            weight: 3,
+            fillOpacity: 0.95
+          });
+        }
+      });
+
+      analysisGroup.addLayer(resultLayer);
+      showAlert("Kesişim Analizi", `Poligon içindeki ${ptsWithin.features.length} adet nokta tespit edildi.`, "success");
+    }
+
+    function runHeatmapAnalysis() {
+      const layerId = document.getElementById('heatmap-layer').value;
+      const layerData = gisLayers[layerId]?.data;
+
+      if (!layerData) return;
+
+      if (heatmapLayer) map.removeLayer(heatmapLayer);
+
+      const heatPoints = layerData.features.map(f => [
+        f.geometry.coordinates[1],
+        f.geometry.coordinates[0],
+        0.8
+      ]);
+
+      heatmapLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 17 });
+      heatmapLayer.addTo(map);
+
+      showAlert("Isı Haritası Hazır", "Nokta yoğunluk haritası gösteriliyor.", "success");
+    }
+
+    function runCentroidAnalysis() {
+      const layerId = document.getElementById('centroid-layer').value;
+      const layerData = gisLayers[layerId]?.data;
+
+      if (!layerData || layerData.features.length === 0) {
+        showAlert("Hata", "Hedef katmanda veri yok.", "error");
+        return;
+      }
+
+      analysisGroup.clearLayers();
+
+      const centerPoint = turf.centroid(layerData);
+
+      const centerMarker = L.circleMarker([centerPoint.geometry.coordinates[1], centerPoint.geometry.coordinates[0]], {
+        radius: 14,
+        fillColor: '#06b6d4',
+        color: '#ffffff',
+        weight: 3,
+        fillOpacity: 0.95
+      }).bindPopup('<b class="text-xs">Geometrik Ağırlık Merkezi (Centroid)</b>');
+
+      analysisGroup.addLayer(centerMarker);
+      map.panTo([centerPoint.geometry.coordinates[1], centerPoint.geometry.coordinates[0]]);
+
+      showAlert("Ağırlık Merkezi Bulundu", "Seçili tesislerin coğrafi merkez noktası turkuaz olarak işaretlendi.", "success");
+    }
+
+    function runInterpolationAnalysis() {
+      const layerId = document.getElementById('interpolate-layer').value;
+      const layerObj = gisLayers[layerId];
+      const layerData = layerObj?.data;
+
+      if (!layerData || !layerData.features || layerData.features.length < 2) {
+        showAlert("Yetersiz Veri", "İnterpolasyon analizi için en az 2 noktadan oluşan bir nokta katmanı gereklidir.", "error");
+        return;
+      }
+
+      const attrKey = document.getElementById('interpolate-attribute').value;
+      if (!attrKey) {
+        showAlert("Sütun Seçilmedi", "Lütfen interpolasyon yapılmasını istediğiniz sayısal sütunu (örn: ppm_degeri) seçin.", "error");
+        return;
+      }
+
+      analysisGroup.clearLayers();
+
+      const gridResolution = parseInt(document.getElementById('interpolate-grid-size').value) || 25;
+      const power = parseFloat(document.getElementById('interpolate-power').value) || 2;
+      const paletteType = document.getElementById('interpolate-palette').value;
+
+      const samplePoints = [];
+      layerData.features.forEach(f => {
+        const rawVal = f.properties ? f.properties[attrKey] : null;
+        const val = parseCoordinate(rawVal);
+        const coords = f.geometry?.coordinates;
+
+        if (!isNaN(val) && coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+          samplePoints.push({
+            lng: coords[0],
+            lat: coords[1],
+            val: val
+          });
+        }
+      });
+
+      if (samplePoints.length < 2) {
+        showAlert("Sayısal Veri Yetersiz", `'${attrKey}' sütununda geçerli sayısal değer içeren en az 2 nokta bulunamadı.`, "error");
+        return;
+      }
+
+      const values = samplePoints.map(p => p.val);
+      const minVal = Math.min(...values);
+      const maxVal = Math.max(...values);
+      const valRange = (maxVal - minVal) === 0 ? 1 : (maxVal - minVal);
+
+      const bbox = turf.bbox(layerData);
+      const padX = (bbox[2] - bbox[0]) * 0.15 || 0.01;
+      const padY = (bbox[3] - bbox[1]) * 0.15 || 0.01;
+
+      const minLng = bbox[0] - padX;
+      const maxLng = bbox[2] + padX;
+      const minLat = bbox[1] - padY;
+      const maxLat = bbox[3] + padY;
+
+      const cellStepLng = (maxLng - minLng) / gridResolution;
+      const cellStepLat = (maxLat - minLat) / gridResolution;
+
+      const gridFeatures = [];
+
+      for (let i = 0; i < gridResolution; i++) {
+        for (let j = 0; j < gridResolution; j++) {
+          const cMinLng = minLng + (i * cellStepLng);
+          const cMaxLng = cMinLng + cellStepLng;
+          const cMinLat = minLat + (j * cellStepLat);
+          const cMaxLat = cMinLat + cellStepLat;
+
+          const centerLng = (cMinLng + cMaxLng) / 2;
+          const centerLat = (cMinLat + cMaxLat) / 2;
+
+          let numSum = 0;
+          let denSum = 0;
+          let exactMatchVal = null;
+
+          for (const sp of samplePoints) {
+            const dist = Math.hypot(centerLng - sp.lng, centerLat - sp.lat);
+            if (dist < 0.00001) {
+              exactMatchVal = sp.val;
+              break;
+            }
+            const weight = 1 / Math.pow(dist, power);
+            numSum += sp.val * weight;
+            denSum += weight;
+          }
+
+          const interpVal = exactMatchVal !== null ? exactMatchVal : (numSum / denSum);
+          const normVal = Math.max(0, Math.min(1, (interpVal - minVal) / valRange));
+          const color = getInterpolationColor(normVal, paletteType);
+
+          const cellPolygon = turf.polygon([[
+            [cMinLng, cMinLat],
+            [cMaxLng, cMinLat],
+            [cMaxLng, cMaxLat],
+            [cMinLng, cMaxLat],
+            [cMinLng, cMinLat]
+          ]], {
+            estimatedValue: interpVal.toFixed(2),
+            normVal: normVal,
+            color: color
+          });
+
+          gridFeatures.push(cellPolygon);
+        }
+      }
+
+      const gridCollection = turf.featureCollection(gridFeatures);
+      const leafletInterpolatedGrid = L.geoJSON(gridCollection, {
+        style: function(f) {
+          return {
+            color: f.properties.color,
+            fillColor: f.properties.color,
+            fillOpacity: 0.6,
+            weight: 0.2,
+            opacity: 0.3
+          };
+        },
+        onEachFeature: function(f, layer) {
+          layer.bindTooltip(`<b>${attrKey}:</b> ${f.properties.estimatedValue}`, {
+            sticky: true,
+            className: 'bg-slate-900 text-slate-100 text-xs px-2 py-1 rounded shadow border border-slate-700'
+          });
+        }
+      });
+
+      analysisGroup.addLayer(leafletInterpolatedGrid);
+      map.fitBounds(leafletInterpolatedGrid.getBounds(), { padding: [20, 20] });
+
+      showAlert('İnterpolasyon Tamamlandı', `'${attrKey}' sütunu için ${gridResolution}x${gridResolution} IDW tahmin yüzeyi üretildi. Min: ${minVal.toFixed(1)}, Maks: ${maxVal.toFixed(1)}`, 'success');
+    }
+
+    function getInterpolationColor(t, palette) {
+      if (palette === 'viridis') {
+        if (t < 0.33) return mixColors('#440154', '#3b528b', t / 0.33);
+        if (t < 0.66) return mixColors('#3b528b', '#21918c', (t - 0.33) / 0.33);
+        return mixColors('#21918c', '#fde725', (t - 0.66) / 0.34);
+      } else if (palette === 'ocean') {
+        if (t < 0.5) return mixColors('#0f172a', '#06b6d4', t / 0.5);
+        return mixColors('#06b6d4', '#e0f2fe', (t - 0.5) / 0.5);
+      } else {
+        if (t < 0.33) return mixColors('#3b82f6', '#10b981', t / 0.33);
+        if (t < 0.66) return mixColors('#10b981', '#f59e0b', (t - 0.33) / 0.33);
+        return mixColors('#f59e0b', '#ef4444', (t - 0.66) / 0.34);
+      }
+    }
+
+    function mixColors(color1, color2, weight) {
+      const c1 = parseInt(color1.slice(1), 16);
+      const c2 = parseInt(color2.slice(1), 16);
+
+      const r1 = (c1 >> 16) & 0xff, g1 = (c1 >> 8) & 0xff, b1 = c1 & 0xff;
+      const r2 = (c2 >> 16) & 0xff, g2 = (c2 >> 8) & 0xff, b2 = c2 & 0xff;
+
+      const r = Math.round(r1 + weight * (r2 - r1));
+      const g = Math.round(g1 + weight * (g2 - g1));
+      const b = Math.round(b1 + weight * (b2 - b1));
+
+      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+    }
+
+    function clearAnalyses() {
+      analysisGroup.clearLayers();
+      if (heatmapLayer) map.removeLayer(heatmapLayer);
+      showAlert('Temizlendi', 'Haritadaki analiz sonuçları kaldırıldı.', 'info');
+    }
+
+    function toggleAttributeTable() {
+      const drawer = document.getElementById('attribute-drawer');
+      drawer.classList.toggle('translate-y-full');
+    }
+
+    function renderAttributeTable() {
+      const select = document.getElementById('attr-table-layer-select');
+      const head = document.getElementById('attr-table-head');
+      const body = document.getElementById('attr-table-body');
+
+      const layerId = select.value || Object.keys(gisLayers)[0];
+      if (!layerId || !gisLayers[layerId]) {
+        head.innerHTML = '';
+        body.innerHTML = '<tr><td class="p-3 text-slate-500 italic">Gösterilecek katman yok</td></tr>';
+        return;
+      }
+
+      const features = gisLayers[layerId].data.features;
+      if (!features || features.length === 0) return;
+
+      const keys = Object.keys(features[0].properties);
+
+      head.innerHTML = `<tr><th class="p-2 border-b border-slate-800">#</th>` +
+        keys.map(k => `<th class="p-2 border-b border-slate-800">${k}</th>`).join('') + `</tr>`;
+
+      body.innerHTML = features.map((f, idx) => {
+        return `<tr class="hover:bg-slate-800/50 transition">
+          <td class="p-2 text-slate-500 font-mono">${idx + 1}</td>` +
+          keys.map(k => `<td class="p-2">${f.properties[k] !== undefined ? f.properties[k] : ''}</td>`).join('') +
+          `</tr>`;
+      }).join('');
+    }
+
+    function exportAttributeTableCSV() {
+      const select = document.getElementById('attr-table-layer-select');
+      const layerId = select.value;
+      if (!layerId || !gisLayers[layerId]) return;
+
+      const features = gisLayers[layerId].data.features;
+      if (!features || features.length === 0) return;
+
+      const rows = features.map(f => f.properties);
+      const csv = Papa.unparse(rows);
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${gisLayers[layerId].name}_oznitelik_tablosu.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function showAlert(title, text, type = 'info') {
+      const box = document.getElementById('alert-box');
+      const content = document.getElementById('alert-content');
+
+      let colorClasses = "bg-slate-900 border-slate-700 text-slate-200";
+      let icon = `<i class="fa-solid fa-circle-info text-cyan-400 text-lg"></i>`;
+
+      if (type === 'success') {
+        colorClasses = "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+        icon = `<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>`;
+      } else if (type === 'error') {
+        colorClasses = "bg-rose-950/90 border-rose-700 text-rose-200";
+        icon = `<i class="fa-solid fa-triangle-exclamation text-rose-400 text-lg"></i>`;
+      }
+
+      content.className = `px-4 py-3 rounded-xl border shadow-2xl text-xs flex items-center gap-3 ${colorClasses}`;
+      content.innerHTML = `${icon} <div><b class="block text-sm font-semibold">${title}</b><span>${text}</span></div>`;
+
+      box.classList.remove('hidden');
+      setTimeout(() => {
+        box.classList.add('hidden');
+      }, 3500);
+    }
+
+    function toggleHelpModal() {
+      document.getElementById('help-modal').classList.toggle('hidden');
+    }
+  </script>
+</body>
+</html>
